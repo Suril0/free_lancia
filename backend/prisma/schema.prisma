@@ -1,0 +1,453 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CLIENT
+  FREELANCER
+}
+
+enum ProjectStatus {
+  OPEN
+  IN_PROGRESS
+  AWAITING_REVIEW
+  COMPLETED
+  DISPUTED
+  CANCELLED
+}
+
+enum ProposalStatus {
+  PENDING
+  SHORTLISTED
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+}
+
+enum EscrowStatus {
+  FUNDED
+  IN_PROGRESS
+  SUBMITTED
+  AI_VERIFIED
+  APPROVED
+  PAID
+  REVISION_REQUESTED
+  DISPUTED
+  REFUNDED
+  CANCELLED
+}
+
+enum AiVerdict {
+  PASS
+  REVIEW
+  FAIL
+}
+
+enum RequirementStatus {
+  MET
+  PARTIAL
+  NOT_MET
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED_TO_FREELANCER
+  RESOLVED_TO_CLIENT
+}
+
+enum TransactionType {
+  FUND
+  RELEASE
+  REFUND
+}
+
+enum TransactionStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+}
+
+enum NotificationType {
+  HIRED
+  ESCROW_FUNDED
+  WORK_SUBMITTED
+  PAYMENT_RELEASED
+  MESSAGE
+  AI_REPORT_READY
+  REVISION_REQUESTED
+  DISPUTE_OPENED
+  SYSTEM
+}
+
+model User {
+  id                     String                  @id @default(cuid())
+  email                  String                  @unique
+  passwordHash           String?
+  name                   String
+  avatarUrl              String?
+  title                  String?
+  bio                    String?
+  location               String?
+  roles                  UserRole[]
+  activeRole             UserRole                @default(FREELANCER)
+  emailVerified          Boolean                 @default(false)
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  wallet                 Wallet?
+  freelancerProfile      FreelancerProfile?
+  clientProfile          ClientProfile?
+  clientProjects         Project[]               @relation("ProjectClient")
+  proposals              Proposal[]
+  submissions            Submission[]
+  requestedRevisions     Revision[]              @relation("RevisionRequester")
+  openedDisputes         Dispute[]               @relation("DisputeOpener")
+  disputeEvidence        DisputeEvidence[]
+  sentMessages           Message[]
+  reviewsGiven           Review[]                @relation("ReviewAuthor")
+  reviewsReceived        Review[]                @relation("ReviewRecipient")
+  transactions           Transaction[]
+  notifications          Notification[]
+  activityEntries        ActivityLog[]
+  shortlists             Shortlist[]             @relation("ShortlistClient")
+  notificationPreference NotificationPreference?
+  refreshSessions        RefreshSession[]
+  siweNonces             SiweNonce[]
+
+  @@index([activeRole, createdAt])
+}
+
+model Wallet {
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  address    String   @unique
+  chainId    Int
+  verifiedAt DateTime
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model FreelancerProfile {
+  userId            String   @id
+  skills            String[] @default([])
+  ratingAvg         Decimal  @default(0) @db.Decimal(3, 2)
+  ratingCount       Int      @default(0)
+  completedProjects Int      @default(0)
+  successRate       Decimal  @default(0) @db.Decimal(5, 2)
+  totalEarned       Decimal  @default(0) @db.Decimal(18, 6)
+  price             Decimal  @default(0) @db.Decimal(18, 6)
+  deliveryDays      Int      @default(0)
+  badges            String[] @default([])
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ClientProfile {
+  userId          String  @id
+  paymentVerified Boolean @default(false)
+  projectsPosted  Int     @default(0)
+  totalSpent      Decimal @default(0) @db.Decimal(18, 6)
+  ratingAvg       Decimal @default(0) @db.Decimal(3, 2)
+  user            User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Project {
+  id              String        @id @default(cuid())
+  clientId        String
+  title           String
+  description     String
+  budget          Decimal       @db.Decimal(18, 6)
+  currency        String        @default("PYUSD")
+  deadline        DateTime
+  durationDays    Int
+  skills          String[]      @default([])
+  experienceLevel String        @default("Intermediate")
+  remote          Boolean       @default(true)
+  status          ProjectStatus @default(OPEN)
+  featured        Boolean       @default(false)
+  proposalCount   Int           @default(0)
+  publicRef       String        @unique
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  client          User          @relation("ProjectClient", fields: [clientId], references: [id], onDelete: Restrict)
+  requirements    Requirement[]
+  proposals       Proposal[]
+  escrow          Escrow?
+  submissions     Submission[]
+  disputes        Dispute[]
+  messages        Message[]
+  reviews         Review[]
+  transactions    Transaction[]
+  activity        ActivityLog[]
+
+  @@index([status, createdAt])
+  @@index([clientId, status])
+  @@index([featured, status])
+  @@index([deadline])
+}
+
+model Requirement {
+  id        String  @id @default(cuid())
+  projectId String
+  text      String
+  order     Int
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, order])
+}
+
+model Proposal {
+  id           String         @id @default(cuid())
+  projectId    String
+  freelancerId String
+  price        Decimal        @db.Decimal(18, 6)
+  deliveryDays Int
+  coverMessage String
+  status       ProposalStatus @default(PENDING)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  project      Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  freelancer   User           @relation(fields: [freelancerId], references: [id], onDelete: Restrict)
+  shortlist    Shortlist?
+
+  @@unique([projectId, freelancerId])
+  @@index([projectId, status, createdAt])
+  @@index([freelancerId, status])
+}
+
+model Escrow {
+  id              String       @id @default(cuid())
+  projectId       String       @unique
+  contractAddress String
+  onChainId       BigInt?      @unique
+  amount          Decimal      @db.Decimal(18, 6)
+  fee             Decimal      @db.Decimal(18, 6)
+  status          EscrowStatus @default(FUNDED)
+  fundedTx        String?      @unique
+  submittedTx     String?      @unique
+  revisionTx      String?      @unique
+  disputeTx       String?      @unique
+  releasedTx      String?      @unique
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  project         Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([status, updatedAt])
+}
+
+model Submission {
+  id                   String     @id @default(cuid())
+  projectId            String
+  freelancerId         String
+  notes                String
+  repoUrl              String?
+  liveUrl              String?
+  files                String[]   @default([])
+  requirementChecklist Json
+  version              Int
+  submittedAt          DateTime   @default(now())
+  project              Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  freelancer           User       @relation(fields: [freelancerId], references: [id], onDelete: Restrict)
+  aiReports            AiReport[]
+  revisions            Revision[]
+
+  @@unique([projectId, version])
+  @@index([projectId, submittedAt])
+  @@index([freelancerId, submittedAt])
+}
+
+model AiReport {
+  id             String     @id @default(cuid())
+  submissionId   String
+  score          Int
+  verdict        AiVerdict
+  qualityScore   Int
+  confidence     Int
+  perRequirement Json
+  summary        String
+  advisoryOnly   Boolean    @default(true)
+  modelId        String
+  promptVersion  String     @default("v1")
+  createdAt      DateTime   @default(now())
+  submission     Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId, createdAt])
+}
+
+model Revision {
+  id           String     @id @default(cuid())
+  submissionId String
+  requestedBy  String
+  feedback     String
+  createdAt    DateTime   @default(now())
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  requester    User       @relation("RevisionRequester", fields: [requestedBy], references: [id], onDelete: Restrict)
+
+  @@index([submissionId, createdAt])
+}
+
+model Dispute {
+  id                  String            @id @default(cuid())
+  projectId           String
+  openedBy            String
+  reason              String
+  status              DisputeStatus     @default(OPEN)
+  resolution          String?
+  resolutionTx        String?           @unique
+  releaseToFreelancer Boolean?
+  deadlineToRespond   DateTime?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  project             Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  opener              User              @relation("DisputeOpener", fields: [openedBy], references: [id], onDelete: Restrict)
+  evidence            DisputeEvidence[]
+
+  @@index([projectId, status])
+}
+
+model DisputeEvidence {
+  id        String   @id @default(cuid())
+  disputeId String
+  userId    String
+  text      String
+  fileUrl   String?
+  createdAt DateTime @default(now())
+  dispute   Dispute  @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([disputeId, createdAt])
+}
+
+model Message {
+  id          String    @id @default(cuid())
+  projectId   String
+  senderId    String
+  body        String
+  attachments String[]  @default([])
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sender      User      @relation(fields: [senderId], references: [id], onDelete: Restrict)
+
+  @@index([projectId, createdAt])
+  @@index([senderId, readAt])
+}
+
+model Review {
+  id         String   @id @default(cuid())
+  projectId  String
+  reviewerId String
+  revieweeId String
+  rating     Int
+  comment    String
+  createdAt  DateTime @default(now())
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  reviewer   User     @relation("ReviewAuthor", fields: [reviewerId], references: [id], onDelete: Restrict)
+  reviewee   User     @relation("ReviewRecipient", fields: [revieweeId], references: [id], onDelete: Restrict)
+
+  @@unique([projectId, reviewerId])
+  @@index([revieweeId, createdAt])
+}
+
+model Transaction {
+  id          String            @id @default(cuid())
+  userId      String
+  projectId   String?
+  type        TransactionType
+  amount      Decimal           @db.Decimal(18, 6)
+  status      TransactionStatus @default(PENDING)
+  txHash      String?           @unique
+  blockNumber BigInt?
+  createdAt   DateTime          @default(now())
+  user        User              @relation(fields: [userId], references: [id], onDelete: Restrict)
+  project     Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([projectId, type])
+  @@index([status, createdAt])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType @default(SYSTEM)
+  title     String
+  detail    String
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  projectId String
+  actorId   String?
+  type      String
+  title     String
+  detail    String
+  createdAt DateTime @default(now())
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  actor     User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, createdAt])
+}
+
+model Shortlist {
+  id         String   @id @default(cuid())
+  clientId   String
+  proposalId String   @unique
+  createdAt  DateTime @default(now())
+  client     User     @relation("ShortlistClient", fields: [clientId], references: [id], onDelete: Cascade)
+  proposal   Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, proposalId])
+  @@index([clientId, createdAt])
+}
+
+model NotificationPreference {
+  userId         String  @id
+  email          Boolean @default(true)
+  push           Boolean @default(true)
+  productUpdates Boolean @default(false)
+  user           User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model RefreshSession {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model SiweNonce {
+  id        String    @id @default(cuid())
+  userId    String?
+  nonceHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+}
+
+model Testimonial {
+  id        String   @id @default(cuid())
+  quote     String
+  name      String
+  role      String
+  order     Int      @unique
+  createdAt DateTime @default(now())
+}

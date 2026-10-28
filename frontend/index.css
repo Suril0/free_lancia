@@ -1,0 +1,33 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --color-brand-50: #eef2ff;
+  --color-brand-100: #e0e7ff;
+  --color-brand-500: #6366f1;
+  --color-brand-600: #4f46e5;
+  --color-brand-700: #4338ca;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; min-width: 320px; background: #f8fafc; color: #0f172a; }
+.dark body { background: #080d18; color: #e2e8f0; }
+button, input, textarea, select { font: inherit; }
+button { cursor: pointer; }
+::selection { background: #c7d2fe; color: #312e81; }
+
+.scrollbar-none::-webkit-scrollbar { display: none; }
+.grid-bg {
+  background-image: radial-gradient(circle at 1px 1px, rgb(148 163 184 / 18%) 1px, transparent 0);
+  background-size: 28px 28px;
+}
+.shine {
+  background: linear-gradient(110deg, transparent 25%, rgb(255 255 255 / 30%) 45%, transparent 65%);
+  background-size: 250% 100%;
+  animation: shine 2.3s infinite;
+}
+@keyframes shine { to { background-position-x: -250%; } }

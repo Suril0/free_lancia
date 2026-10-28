@@ -1,0 +1,55 @@
+{
+  "name": "@freelancia/api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "worker:verification": "tsx src/verification-worker.ts",
+    "worker:verification:prod": "node dist/src/verification-worker.js",
+    "build": "tsc",
+    "start": "node dist/src/server.js",
+    "lint": "eslint src prisma/seed.ts --max-warnings=0",
+    "test": "tsx --test src/auth.test.ts src/auth-siwe.test.ts src/projects.test.ts src/ai/verifier.test.ts src/chain/chain.test.ts",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:check": "tsx prisma/check.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.859.0",
+    "@aws-sdk/s3-presigned-post": "^3.859.0",
+    "@prisma/client": "^6.19.0",
+    "argon2": "^0.45.1",
+    "bullmq": "^5.58.5",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "ethers": "^6.17.0",
+    "express": "^5.1.0",
+    "express-rate-limit": "^7.5.1",
+    "helmet": "^8.1.0",
+    "ioredis": "^5.7.0",
+    "jose": "^6.2.13",
+    "pino": "^9.7.0",
+    "socket.io": "^4.8.4",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.28.0",
+    "@types/cookie-parser": "^1.4.10",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/node": "^22.15.30",
+    "eslint": "^9.28.0",
+    "globals": "^16.2.0",
+    "prisma": "^6.19.0",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.34.1"
+  }
+}
